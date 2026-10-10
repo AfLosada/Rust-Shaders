@@ -1,0 +1,14 @@
+[package]
+name = "rust-opengl"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytemuck = "1"
+gl33 = { version = "0.2.1" }
+beryllium = "0.13.3"
+imagine = "0.0.5"
+
+[dev-dependencies]
+beryllium = "0.13.3"
+imagine = "0.0.5"
