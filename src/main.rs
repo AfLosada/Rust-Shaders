@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(clippy::single_match)]
 
+pub mod structs;
+
 const WINDOW_TITLE: &str = "Hello Window";
 
 const VERT_SHADER: &str = r#"#version 330 core
@@ -28,8 +30,14 @@ use beryllium::{
 
 use gl33::{
     self, GL_ARRAY_BUFFER, GL_COLOR_BUFFER_BIT, GL_COMPILE_STATUS, GL_FLOAT, GL_FRAGMENT_SHADER,
-    GL_LINK_STATUS, GL_STATIC_DRAW, GL_TRIANGLES, GL_VERTEX_SHADER,
+    GL_LINK_STATUS, GL_STATIC_DRAW, GL_TRIANGLES, GL_VERTEX_SHADER, GlFns,
 };
+
+use crate::structs::{Buffer, BufferType, ShaderProgram, VertexArray};
+
+pub fn clear_color(gl_fn: &GlFns, r: f32, g: f32, b: f32, a: f32) {
+    unsafe { gl_fn.ClearColor(r, g, b, a) }
+}
 
 fn main() {
     let sdl = Sdl::init(InitFlags::EVERYTHING);
@@ -52,111 +60,15 @@ fn main() {
         .unwrap();
 
     let gl_fns = unsafe { gl33::GlFns::load_from(&|f| _win.get_proc_address(f)).unwrap() };
-    unsafe { gl_fns.ClearColor(0.3, 0.4, 0.4, 1.0) };
 
-    unsafe {
-        let mut vao = 0;
-        gl_fns.GenVertexArrays(1, &mut vao);
-        assert_ne!(vao, 0);
-        gl_fns.BindVertexArray(vao);
-    }
+    clear_color(&gl_fns, 0.3, 0.4, 0.4, 1.0);
 
-    unsafe {
-        let mut vbo = 0;
-        gl_fns.GenBuffers(1, &mut vbo);
-        assert_ne!(vbo, 0);
+    let vao = VertexArray::new(&gl_fns).unwrap();
+    let vbo = Buffer::new(&gl_fns).unwrap();
+    vao.bind();
+    vbo.bind(structs::BufferType::Array);
 
-        gl_fns.BindBuffer(GL_ARRAY_BUFFER, vbo);
-    }
-    type Vertex = [f32; 3];
-    const VERTICES: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0.0]];
-    unsafe {
-        gl_fns.BufferData(
-            GL_ARRAY_BUFFER,
-            size_of_val(&VERTICES) as isize,
-            VERTICES.as_ptr().cast(),
-            GL_STATIC_DRAW,
-        );
-    }
-
-    unsafe {
-        gl_fns.VertexAttribPointer(
-            0,
-            3,
-            GL_FLOAT,
-            0,
-            size_of::<Vertex>().try_into().unwrap(),
-            0 as *const _,
-        );
-        gl_fns.EnableVertexAttribArray(0);
-    }
-
-    let vertex_shader = gl_fns.CreateShader(GL_VERTEX_SHADER);
-    assert_ne!(vertex_shader, 0);
-
-    unsafe {
-        gl_fns.ShaderSource(
-            vertex_shader,
-            1,
-            &(VERT_SHADER.as_bytes().as_ptr().cast()),
-            &(VERT_SHADER.len().try_into().unwrap()),
-        );
-        gl_fns.CompileShader(vertex_shader);
-        let mut success = 0;
-        gl_fns.GetShaderiv(vertex_shader, GL_COMPILE_STATUS, &mut success);
-
-        if success == 0 {
-            let mut v: Vec<u8> = Vec::with_capacity(1024);
-            let mut log_len = 0_i32;
-            gl_fns.GetShaderInfoLog(vertex_shader, 1024, &mut log_len, v.as_mut_ptr().cast());
-            v.set_len(log_len.try_into().unwrap());
-            panic!("Vertex Compile Error: {}", String::from_utf8_lossy(&v));
-        }
-    }
-
-    let fragment_shader = gl_fns.CreateShader(GL_FRAGMENT_SHADER);
-    assert_ne!(fragment_shader, 0);
-
-    unsafe {
-        gl_fns.ShaderSource(
-            fragment_shader,
-            1,
-            &(FRAG_SHADER.as_bytes().as_ptr().cast()),
-            &(FRAG_SHADER.len().try_into().unwrap()),
-        );
-        gl_fns.CompileShader(fragment_shader);
-        let mut success = 0;
-        gl_fns.GetShaderiv(fragment_shader, GL_COMPILE_STATUS, &mut success);
-        if success == 0 {
-            let mut v: Vec<u8> = Vec::with_capacity(1024);
-            let mut log_len = 0_i32;
-            gl_fns.GetShaderInfoLog(fragment_shader, 1024, &mut log_len, v.as_mut_ptr().cast());
-            v.set_len(log_len.try_into().unwrap());
-            panic!("Fragment Compile Error: {}", String::from_utf8_lossy(&v));
-        }
-    }
-
-    let shader_program = gl_fns.CreateProgram();
-    gl_fns.AttachShader(shader_program, vertex_shader);
-    gl_fns.AttachShader(shader_program, fragment_shader);
-    gl_fns.LinkProgram(shader_program);
-
-    unsafe {
-        let mut success = 0;
-        gl_fns.GetProgramiv(shader_program, GL_LINK_STATUS, &mut success);
-        if success == 0 {
-            let mut v: Vec<u8> = Vec::with_capacity(1024);
-            let mut log_len = 0_i32;
-            gl_fns.GetProgramInfoLog(shader_program, 1024, &mut log_len, v.as_mut_ptr().cast());
-            v.set_len(log_len.try_into().unwrap());
-            panic!("Program Link Error: {}", String::from_utf8_lossy(&v));
-        }
-    }
-
-    gl_fns.DeleteShader(vertex_shader);
-    gl_fns.DeleteShader(fragment_shader);
-
-    gl_fns.UseProgram(shader_program);
+    draw_rectangle(&gl_fns);
 
     'main_loop: loop {
         // handle events this frame
@@ -175,4 +87,60 @@ fn main() {
         }
         _win.swap_window();
     }
+}
+
+fn draw_rectangle(gl_fns: &GlFns) {
+    type Vertex = [f32; 3];
+    type TriIndexes = [u32; 3];
+
+    const VERTICES: [Vertex; 4] = [
+        [0.5, 0.5, 0.0],
+        [0.5, -0.5, 0.0],
+        [-0.5, -0.5, 0.0],
+        [-0.5, 0.5, 0.0],
+    ];
+
+    const INDICES: [TriIndexes; 2] = [[0, 1, 3], [1, 2, 3]];
+
+    let vertices_buffer = Buffer::new(&gl_fns).unwrap();
+    vertices_buffer.bind(structs::BufferType::ElementArray);
+    let ebo = Buffer::new(gl_fns).expect("Couldn't make the element buffer.");
+    ebo.bind(BufferType::ElementArray);
+    ebo.buffer_data(
+        BufferType::ElementArray,
+        bytemuck::cast_slice(&INDICES),
+        GL_STATIC_DRAW,
+    );
+}
+
+fn draw_triangle(gl_fns: &GlFns) {
+    type Vertex = [f32; 3];
+    const VERTICES: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0.0]];
+
+    let vertices_buffer = Buffer::new(&gl_fns).unwrap();
+    vertices_buffer.bind(structs::BufferType::ElementArray);
+
+    vertices_buffer.buffer_data(
+        BufferType::Array,
+        bytemuck::cast_slice(&VERTICES),
+        GL_STATIC_DRAW,
+    );
+
+    unsafe {
+        gl_fns.VertexAttribPointer(
+            0,
+            3,
+            GL_FLOAT,
+            0,
+            size_of::<Vertex>().try_into().unwrap(),
+            0 as *const _,
+        );
+        gl_fns.EnableVertexAttribArray(0);
+    }
+
+    let vertex_shader = gl_fns.CreateShader(GL_VERTEX_SHADER);
+    assert_ne!(vertex_shader, 0);
+
+    let shader_program = ShaderProgram::from_vert_frag(&gl_fns, VERT_SHADER, FRAG_SHADER).unwrap();
+    shader_program.use_program();
 }
