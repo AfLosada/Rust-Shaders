@@ -6,11 +6,15 @@ use beryllium::{
 };
 
 use gl33::{
-    self, GL_ARRAY_BUFFER, GL_COMPILE_STATUS, GL_ELEMENT_ARRAY_BUFFER, GL_FRAGMENT_SHADER,
-    GL_INFO_LOG_LENGTH, GL_LINK_STATUS, GL_TRUE, GL_VERTEX_SHADER, GlFns,
+    self, GL_ARRAY_BUFFER, GL_COMPILE_STATUS, GL_ELEMENT_ARRAY_BUFFER, GL_FILL, GL_FRAGMENT_SHADER,
+    GL_FRONT_AND_BACK, GL_INFO_LOG_LENGTH, GL_LINE, GL_LINK_STATUS, GL_POINT, GL_TRUE,
+    GL_VERTEX_SHADER, GlFns,
 };
 
 use gl33::gl_core_types::*;
+
+pub type Vertex = [f32; 3];
+pub type TriIndexes = [u32; 3];
 
 /// Basic wrapper for a [Vertex Array
 /// Object](https://www.khronos.org/opengl/wiki/Vertex_Specification#Vertex_Array_Object).
@@ -285,6 +289,7 @@ impl<'gl_lifetime> ShaderProgram<'gl_lifetime> {
         vert: &str,
         frag: &str,
     ) -> Result<Self, String> {
+        
         let p = Self::new(gl_fns).ok_or_else(|| "Couldn't allocate a program".to_string())?;
         let v = Shader::from_source(gl_fns, ShaderType::Vertex, vert)
             .map_err(|e| format!("Vertex Compile Error: {}", e))?;
@@ -303,4 +308,19 @@ impl<'gl_lifetime> ShaderProgram<'gl_lifetime> {
             Err(out)
         }
     }
+    /// Sets the font and back polygon mode to the mode given.
+    pub fn polygon_mode(&self, mode: PolygonMode) {
+        unsafe { self.0.PolygonMode(GL_FRONT_AND_BACK, GLenum(mode as u32)) };
+    }
+}
+
+/// The polygon display modes you can set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolygonMode {
+    /// Just show the points.
+    Point = GL_POINT.0 as isize,
+    /// Just show the lines.
+    Line = GL_LINE.0 as isize,
+    /// Fill in the polygons.
+    Fill = GL_FILL.0 as isize,
 }
