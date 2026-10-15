@@ -127,6 +127,7 @@ fn draw_rectangle(gl_fns: &GlFns) {
 
     let ebo = Buffer::new(&gl_fns).expect("Couldn't make the element buffer.");
     ebo.bind(BufferType::ElementArray);
+
     ebo.buffer_data(
         BufferType::ElementArray,
         bytemuck::cast_slice(&INDICES),
